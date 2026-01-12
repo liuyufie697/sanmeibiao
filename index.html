@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="blue">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>三没表管理系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+  <script>
+    tailwind.config = {
+      daisyui: {
+        themes: [{
+          blue: {
+            primary: "#3B82F6",
+            "primary-content": "#ffffff",
+            secondary: "#60A5FA",
+            accent: "#8B5CF6",
+            neutral: "#1E293B",
+            "base-100": "#0F172A",
+            "base-200": "#1E293B",
+            "base-300": "#334155",
+            info: "#0EA5E9",
+            success: "#10B981",
+            warning: "#F59E0B",
+            error: "#EF4444",
+          }
+        }],
+      },
+    }
+  </script>
+  <style>
+    .btn-primary { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); }
+    .btn-primary:hover { background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%); transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgba(59,130,246,0.3); }
+    .card { transition: all 0.3s ease; }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(59,130,246,0.2); }
+  </style>
+</head>
+<body class="min-h-screen bg-base-200 text-base-content">
+
+  <!-- 登录页 -->
+  <div id="loginPage" class="flex items-center justify-center min-h-screen p-4">
+    <div class="card w-full max-w-sm shadow-2xl">
+      <div class="card-body">
+        <h2 class="card-title text-3xl justify-center mb-8 text-primary">三没表管理系统</h2>
+        <div class="form-control">
+          <label class="label"><span class="label-text">用户名</span></label>
+          <input id="username" type="text" placeholder="admin 或 user" class="input input-bordered input-lg w-full" />
+        </div>
+        <div class="form-control mt-6">
+          <label class="label"><span class="label-text">密码</span></label>
+          <input id="password" type="password" placeholder="123456" class="input input-bordered input-lg w-full" />
+        </div>
+        <div class="mt-8">
+          <button onclick="login()" class="btn btn-primary btn-lg w-full">登录</button>
+        </div>
+        <p class="text-center text-sm mt-6 opacity-70">
+          admin / 123456 （可派单+回填）<br>
+          user / 123456 （只读）
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主界面（站点 + 搜索） -->
+  <div id="mainApp" class="hidden flex flex-col h-screen">
+    <div class="navbar bg-base-100 shadow-lg">
+      <div class="flex-1 px-4">
+        <a class="btn btn-ghost text-xl font-bold text-primary">三没表 · <span id="currentUser" class="text-secondary"></span></a>
+      </div>
+      <div class="px-4">
+        <button onclick="logout()" class="btn btn-outline btn-sm">退出</button>
+      </div>
+    </div>
+
+    <div class="p-4 flex-1 overflow-y-auto">
+      <!-- 搜索栏 -->
+      <div class="form-control mb-6">
+        <input id="searchInput" type="text" placeholder="搜索账号/户名/地址..." class="input input-bordered w-full" oninput="filterList()" />
+      </div>
+
+      <!-- 站点统计卡片 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="stats shadow bg-base-100">
+          <div class="stat">
+            <div class="stat-title">瞿溪站</div>
+            <div class="stat-value text-primary" id="qxCount">61</div>
+            <div class="stat-desc">未完成项</div>
+          </div>
+        </div>
+        <div class="stats shadow bg-base-100">
+          <div class="stat">
+            <div class="stat-title">新闸站</div>
+            <div class="stat-value text-primary" id="xzCount">103</div>
+            <div class="stat-desc">未完成项</div>
+          </div>
+        </div>
+        <div class="stats shadow bg-base-100">
+          <div class="stat">
+            <div class="stat-title">半淞园站</div>
+            <div class="stat-value text-primary" id="bsyCount">86</div>
+            <div class="stat-desc">未完成项</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 清单列表 -->
+      <div id="listContainer" class="space-y-4"></div>
+    </div>
+  </div>
+
+  <!-- 模态 - 派单 / 回填表单 -->
+  <input type="checkbox" id="actionModal" class="modal-toggle" />
+  <div class="modal" role="dialog">
+    <div class="modal-box max-w-lg">
+      <h3 class="font-bold text-lg mb-4" id="modalTitle">操作</h3>
+      <div class="form-control space-y-4" id="modalContent"></div>
+      <div class="modal-action">
+        <button onclick="saveAction()" class="btn btn-primary">保存</button>
+        <label for="actionModal" class="btn">取消</label>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null;
+    let data = []; // 所有三没表数据
+    let currentItem = null; // 当前操作项
+
+    // 初始化数据（从你Excel简化提取，实际可扩展更多字段）
+    function initData() {
+      data = [
+        // 瞿溪站 示例（前几条）
+        {id:1, site:"瞿溪站", account:"0591481100", name:"市政消防", addr:"打浦路603号对面", code:"9050", pos:"603号对面", caliber:150, readOut:"", lastRead:"", processDate:"", supplement:0, status:"未完成"},
+        {id:2, site:"瞿溪站", account:"1109814100", name:"上海光明村实业总公司", addr:"淮海中路586-590号", code:"9050", pos:"584弄内窗下第一小箱", caliber:100, readOut:"", lastRead:"", processDate:"", supplement:0, status:"未完成"},
+        {id:3, site:"瞿溪站", account:"1148481100", name:"太平洋织造总厂", addr:"斜土路645号", code:"9050", pos:"南塘浜路117号对面门口", caliber:150, readOut:"", lastRead:"", processDate:"", supplement:0, status:"未完成"},
+        // ...你可以继续添加其他条目，或用更完整数组
+        // 新闸站 示例
+        {id:100, site:"新闸站", account:"0043481100", name:"康定物业", addr:"余姚路19号", code:"9050", pos:"昌平路人行道上", caliber:200, readOut:"", lastRead:"", processDate:"", supplement:0, status:"未完成"},
+        // 半淞园站 示例
+        {id:200, site:"半淞园站", account:"0349881100", name:"和平影都有限公司", addr:"西藏中路290号", code:"9050", pos:"汉口路766号斜对南箱", caliber:200, readOut:"", lastRead:"", processDate:"", supplement:0, status:"未完成"},
+        // 实际使用时把所有250条放进来，或分批加载
+      ];
+      // 从 localStorage 恢复修改
+      const saved = localStorage.getItem('sanmeiData');
+      if (saved) data = JSON.parse(saved);
+      renderList();
+    }
+
+    function login() {
+      const u = document.getElementById("username").value.trim();
+      const p = document.getElementById("password").value;
+      if ((u === "admin" && p === "123456") || (u === "user" && p === "123456")) {
+        currentUser = { name: u, role: u === "admin" ? "admin" : "user" };
+        document.getElementById("currentUser").textContent = u;
+        document.getElementById("loginPage").classList.add("hidden");
+        document.getElementById("mainApp").classList.remove("hidden");
+        initData();
+      } else {
+        alert("用户名或密码错误！");
+      }
+    }
+
+    function logout() {
+      currentUser = null;
+      document.getElementById("loginPage").classList.remove("hidden");
+      document.getElementById("mainApp").classList.add("hidden");
+    }
+
+    function renderList(filter = "") {
+      const container = document.getElementById("listContainer");
+      container.innerHTML = "";
+      const filtered = data.filter(item => 
+        !filter || 
+        item.account.includes(filter) || 
+        item.name.includes(filter) || 
+        item.addr.includes(filter)
+      );
+
+      filtered.forEach(item => {
+        const statusClass = item.status === '未完成' ? 'badge-error' : item.status === '已派单' ? 'badge-warning' : 'badge-success';
+        const card = document.createElement("div");
+        card.className = "card bg-base-100 shadow-xl";
+        card.innerHTML = `
+          <div class="card-body p-6">
+            <h3 class="font-bold text-lg">${item.name || '未知户名'} (${item.account})</h3>
+            <p class="text-sm opacity-80">${item.addr}</p>
+            <p class="text-sm">站点：${item.site} | 口径：${item.caliber} | 表位：${item.pos}</p>
+            <div class="flex flex-wrap gap-2 mt-3">
+              <div class="badge ${statusClass} badge-md">${item.status}</div>
+              ${item.supplement > 0 ? `<div class="badge badge-info">追补 ${item.supplement}吨</div>` : ''}
+            </div>
+            <div class="card-actions justify-end mt-4 space-x-3">
+              <button onclick="viewDetail(${item.id})" class="btn btn-info btn-sm">详情</button>
+              ${currentUser.role === 'admin' ? `
+                <button onclick="openDispatch(${item.id})" class="btn btn-warning btn-sm">派单</button>
+                <button onclick="openFill(${item.id})" class="btn btn-success btn-sm">回填</button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function filterList() {
+      const val = document.getElementById("searchInput").value.trim();
+      renderList(val);
+    }
+
+    function getItemById(id) {
+      return data.find(item => item.id === id);
+    }
+
+    function openDispatch(id) {
+      currentItem = getItemById(id);
+      document.getElementById("modalTitle").textContent = "派单 - " + currentItem.account;
+      document.getElementById("modalContent").innerHTML = `
+        <label class="label"><span class="label-text">接收人</span></label>
+        <input id="assignTo" type="text" class="input input-bordered w-full" placeholder="张工 / 李工 等" value="${currentItem.assignTo || ''}" />
+        <label class="label mt-4"><span class="label-text">期限（日期）</span></label>
+        <input id="deadline" type="date" class="input input-bordered w-full" />
+        <label class="label mt-4"><span class="label-text">备注</span></label>
+        <textarea id="remark" class="textarea textarea-bordered w-full" placeholder="派单说明..."></textarea>
+      `;
+      document.getElementById("actionModal").checked = true;
+      window.currentAction = "dispatch";
+    }
+
+    function openFill(id) {
+      currentItem = getItemById(id);
+      document.getElementById("modalTitle").textContent = "回填 - " + currentItem.account;
+      document.getElementById("modalContent").innerHTML = `
+        <label class="label"><span class="label-text">掏出水表抄码</span></label>
+        <input id="readOut" type="number" class="input input-bordered w-full" value="${currentItem.readOut || ''}" />
+        <label class="label mt-4"><span class="label-text">最近一次开账抄码</span></label>
+        <input id="lastRead" type="number" class="input input-bordered w-full" value="${currentItem.lastRead || ''}" />
+        <label class="label mt-4"><span class="label-text">处理日期</span></label>
+        <input id="processDate" type="date" class="input input-bordered w-full" value="${currentItem.processDate || ''}" />
+        <label class="label mt-4"><span class="label-text">追补水量 (吨)</span></label>
+        <input id="supplement" type="number" class="input input-bordered w-full" value="${currentItem.supplement || 0}" />
+      `;
+      document.getElementById("actionModal").checked = true;
+      window.currentAction = "fill";
+    }
+
+    function saveAction() {
+      if (!currentItem) return;
+      if (window.currentAction === "dispatch") {
+        currentItem.assignTo = document.getElementById("assignTo").value.trim();
+        currentItem.deadline = document.getElementById("deadline").value;
+        currentItem.remark = document.getElementById("remark").value.trim();
+        currentItem.status = "已派单";
+      } else if (window.currentAction === "fill") {
+        currentItem.readOut = document.getElementById("readOut").value;
+        currentItem.lastRead = document.getElementById("lastRead").value;
+        currentItem.processDate = document.getElementById("processDate").value;
+        currentItem.supplement = parseFloat(document.getElementById("supplement").value) || 0;
+        currentItem.status = currentItem.readOut && currentItem.processDate ? "已完成" : "整改中";
+      }
+      localStorage.setItem('sanmeiData', JSON.stringify(data));
+      renderList(document.getElementById("searchInput").value);
+      document.getElementById("actionModal").checked = false;
+      alert("操作已保存！");
+    }
+
+    function viewDetail(id) {
+      const item = getItemById(id);
+      alert(`详情:\n账号: ${item.account}\n户名: ${item.name}\n地址: ${item.addr}\n表位: ${item.pos}\n口径: ${item.caliber}\n状态: ${item.status}\n${item.readOut ? '抄码: ' + item.readOut : '待填抄码'}`);
+      // 未来可扩展成 modal 详情页
+    }
+
+    // 启动
+    if (currentUser) initData();
+  </script>
+</body>
+</html>
